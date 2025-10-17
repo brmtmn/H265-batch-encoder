@@ -312,25 +312,29 @@ fi
 # =====================
 if (( CLEAN_ONLY > 0 )); then
   echo "🧹 Cleaning temporary files..."
-  find_opts=( "$FOLDER" )
-  (( RECURSIVE == 0 )) && find_opts+=( -maxdepth 1 )
-
   patterns=( -name '.tmp_encode_*' -o -name '.tmp_encode_test_*' )
-
-  find "${find_opts[@]}" -type f \( "${patterns[@]}" \) -print0 |
-  while IFS= read -r -d '' file; do
-    echo "🗑️  Removing: $file"
-    rm -f "$file"
-  done
-
-  # Also clean the temp directory if specified
-  if [[ -n "$TEMP_DIR" ]]; then
-    echo "🧹 Cleaning temporary files from temp directory: $TEMP_DIR"
-    find "$TEMP_DIR" -maxdepth 1 -type f \( "${patterns[@]}" \) -print0 |
+  
+  # Function to clean temporary files in a given directory
+  clean_temp_files() {
+    local dir="$1"
+    local recursive="$2"
+    local find_opts=( "$dir" )
+    [[ "$recursive" == "0" ]] && find_opts+=( -maxdepth 1 )
+    
+    find "${find_opts[@]}" -type f \( "${patterns[@]}" \) -print0 |
     while IFS= read -r -d '' file; do
       echo "🗑️  Removing: $file"
       rm -f "$file"
     done
+  }
+  
+  # Clean source folder
+  clean_temp_files "$FOLDER" "$RECURSIVE"
+  
+  # Also clean the temp directory if specified
+  if [[ -n "$TEMP_DIR" ]]; then
+    echo "🧹 Cleaning temporary files from temp directory: $TEMP_DIR"
+    clean_temp_files "$TEMP_DIR" "0"
   fi
 
   echo "✅ Cleanup complete."
@@ -382,6 +386,7 @@ fi
 ############################
 
 print_config() {
+  local temp_dir_display="${TEMP_DIR:-Source directory}"
   print_boxed_message_multiline <<EOF
 \e[1;1mENCODING SETTINGS\e[0m
 \e[1;33mHardware Acceleration\e[0m      ${USE_HWACCEL} (${HWACCEL_TYPE})
@@ -408,7 +413,7 @@ print_config() {
 \e[1;33mAllow H265\e[0m                 ${ALLOW_H265}
 \e[1;33mAllow AV1\e[0m                  ${ALLOW_AV1}
 \e[1;33mBackup directory\e[0m           ${BACKUP_DIR}
-\e[1;33mTemp directory\e[0m             ${TEMP_DIR}
+\e[1;33mTemp directory\e[0m             ${temp_dir_display}
 \e[1;33mDry run\e[0m                    ${DRY_RUN}
 EOF
  echo""
