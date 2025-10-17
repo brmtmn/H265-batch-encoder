@@ -7,7 +7,7 @@ This script re-encodes video files using hardware-accelerated HEVC (H.265) compr
 optionally skipping already optimized files and ignoring small files.
 
 Usage:
-  ./script.sh [-R] [min=X] [test=Y] [--dry-run] [--keep-original] [--allow-h265] [--allow-av1] [-backup /path] <folder>
+  ./script.sh [-R] [min=X] [test=Y] [--dry-run] [--keep-original] [--allow-h265] [--allow-av1] [-backup /path] [-temp /path] <folder>
     -R              : Encode recursively inside subfolders
     -min=X.YZ        : Ignore files smaller than X.YZ GB
     --regex="PATTERN"        Only include files matching the given regex pattern (e.g., --regex="\.avi$").
@@ -17,6 +17,7 @@ Usage:
     -allow-h265    : Allow files already encoded in H.265
     -allow-av1     : Allow files already encoded in AV1
     -backup /path   : Save original files to backup path (used only if not using --keep-original)
+    -temp /path     : Use specified folder for temporary encoding files (default: same as source)
     --clean         : Remove temporary encoding files (.tmp_encode_*, .tmp_encode_test_*) from the folder(s, if combined with -R) 
     --purge         : Remove encoded.list files from the folder(s, if combined with -R) 
     --retry         : Remove failed.list files from the folder(s, if combined with -R) 
@@ -131,6 +132,7 @@ KEEP_ORIGINAL=0
 ALLOW_H265=0
 ALLOW_AV1=0
 BACKUP_DIR=""
+TEMP_DIR=""
 CLEAN_ONLY=0
 PURGE_ONLY=0
 STOP_AFTER_HOURS=0
@@ -281,6 +283,7 @@ while [[ $# -gt 0 ]]; do
     -allow-h265) ALLOW_H265=1 ; shift ;;
     -allow-av1) ALLOW_AV1=1 ; shift ;;
     -backup) BACKUP_DIR="$2" ; shift 2 ;;
+    -temp) TEMP_DIR="$2" ; shift 2 ;;
     --clean) CLEAN_ONLY=1 ; shift ;;
     --purge) PURGE_ONLY=1 ; shift ;;
     --retry) RETRY=1 ; shift ;;
@@ -293,22 +296,46 @@ done
 
 [[ -z "$FOLDER" || ! -d "$FOLDER" ]] && { echo "❌ Folder not found or not specified: $FOLDER"; exit 1; }
 
+# Validate temp directory if specified
+if [[ -n "$TEMP_DIR" ]]; then
+  if [[ ! -d "$TEMP_DIR" ]]; then
+    echo "❌ Temporary folder not found: $TEMP_DIR"
+    exit 1
+  fi
+  # Ensure TEMP_DIR is an absolute path
+  TEMP_DIR=$(realpath "$TEMP_DIR")
+fi
+
 
 # =====================
 # Cleaning task
 # =====================
 if (( CLEAN_ONLY > 0 )); then
   echo "🧹 Cleaning temporary files..."
-  find_opts=( "$FOLDER" )
-  (( RECURSIVE == 0 )) && find_opts+=( -maxdepth 1 )
-
   patterns=( -name '.tmp_encode_*' -o -name '.tmp_encode_test_*' )
-
-  find "${find_opts[@]}" -type f \( "${patterns[@]}" \) -print0 |
-  while IFS= read -r -d '' file; do
-    echo "🗑️  Removing: $file"
-    rm -f "$file"
-  done
+  
+  # Function to clean temporary files in a given directory
+  clean_temp_files() {
+    local dir="$1"
+    local recursive="$2"
+    local find_opts=( "$dir" )
+    [[ "$recursive" == "0" ]] && find_opts+=( -maxdepth 1 )
+    
+    find "${find_opts[@]}" -type f \( "${patterns[@]}" \) -print0 |
+    while IFS= read -r -d '' file; do
+      echo "🗑️  Removing: $file"
+      rm -f "$file"
+    done
+  }
+  
+  # Clean source folder
+  clean_temp_files "$FOLDER" "$RECURSIVE"
+  
+  # Also clean the temp directory if specified
+  if [[ -n "$TEMP_DIR" ]]; then
+    echo "🧹 Cleaning temporary files from temp directory: $TEMP_DIR"
+    clean_temp_files "$TEMP_DIR" "0"
+  fi
 
   echo "✅ Cleanup complete."
   exit 0
@@ -359,6 +386,7 @@ fi
 ############################
 
 print_config() {
+  local temp_dir_display="${TEMP_DIR:-Source directory}"
   print_boxed_message_multiline <<EOF
 \e[1;1mENCODING SETTINGS\e[0m
 \e[1;33mHardware Acceleration\e[0m      ${USE_HWACCEL} (${HWACCEL_TYPE})
@@ -385,6 +413,7 @@ print_config() {
 \e[1;33mAllow H265\e[0m                 ${ALLOW_H265}
 \e[1;33mAllow AV1\e[0m                  ${ALLOW_AV1}
 \e[1;33mBackup directory\e[0m           ${BACKUP_DIR}
+\e[1;33mTemp directory\e[0m             ${temp_dir_display}
 \e[1;33mDry run\e[0m                    ${DRY_RUN}
 EOF
  echo""
@@ -530,8 +559,15 @@ for f in "${candidates[@]}"; do
   ext_lower=$(echo "$ext" | tr 'A-Z' 'a-z')
   output_ext="$ext_lower"
   [[ "$ext_lower" == "avi" || "$ext_lower" == "mp4" ]] && output_ext="mkv"
-  tmp_file="$dir/.tmp_encode_${base%.*}.$output_ext"
-  tmp_test="$dir/.tmp_encode_test_${base}"
+  
+  # Use TEMP_DIR if specified, otherwise use the same directory as the source file
+  if [[ -n "$TEMP_DIR" ]]; then
+    tmp_file="$TEMP_DIR/.tmp_encode_${base%.*}.$output_ext"
+    tmp_test="$TEMP_DIR/.tmp_encode_test_${base}"
+  else
+    tmp_file="$dir/.tmp_encode_${base%.*}.$output_ext"
+    tmp_test="$dir/.tmp_encode_test_${base}"
+  fi
   
   
 ##############################
