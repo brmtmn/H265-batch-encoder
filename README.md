@@ -62,6 +62,7 @@ Usage:
     --allow-h265    : Allow files already encoded in H.265
     --allow-av1     : Allow files already encoded in AV1
     -backup /path   : Save original files to backup path (used only if not using --keep-original)
+    -temp /path     : Use specified folder for temporary encoding files (default: same as source)
     --clean         : Remove temporary encoding files (.tmp_encode_*, .tmp_encode_test_*) from the folder(s, if combined with -R) 
     --purge         : Remove encoded.list files (.tmp_encode_*, .tmp_encode_test_*) from the folder(s, if combined with -R) 
     -h              : Show this help message
@@ -99,6 +100,7 @@ Usage:
 │  Allow H265                 0                              │
 │  Allow AV1                  0                              │
 │  Backup directory                                          │
+│  Temp directory                                            │
 │  Dry run                    0                              │
 └────────────────────────────────────────────────────────────┘
 Scanning...
