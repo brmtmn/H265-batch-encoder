@@ -323,6 +323,16 @@ if (( CLEAN_ONLY > 0 )); then
     rm -f "$file"
   done
 
+  # Also clean the temp directory if specified
+  if [[ -n "$TEMP_DIR" ]]; then
+    echo "🧹 Cleaning temporary files from temp directory: $TEMP_DIR"
+    find "$TEMP_DIR" -maxdepth 1 -type f \( "${patterns[@]}" \) -print0 |
+    while IFS= read -r -d '' file; do
+      echo "🗑️  Removing: $file"
+      rm -f "$file"
+    done
+  fi
+
   echo "✅ Cleanup complete."
   exit 0
 fi
